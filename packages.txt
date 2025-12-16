@@ -1,4 +1,3 @@
-# System packages required for PDF generation
 libxml2
 libxslt1.1
 libffi-dev
