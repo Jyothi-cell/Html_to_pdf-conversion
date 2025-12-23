@@ -226,6 +226,27 @@ class HTMLToPDFConverter:
       
         return html_content
       
+    def restore_legal_references(self, html_content: str) -> str:  
+        """  
+        Restore legal reference periods that were temporarily replaced with underscores.
+          
+        Args:  
+            html_content: HTML string with protected legal references
+              
+        Returns:  
+            HTML string with restored periods in legal references  
+        """  
+        # RESTORATION PHASE: Reverse "paragraph 1_1" back to "paragraph 1.1"  
+        html_content = re.sub(r'\b(\w+)\s+(\d+)_(\d+)\b', r'\1 \2.\3', html_content)
+          
+        # Reverse "(paragraph 4_1)" back to "(paragraph 4.1)"  
+        html_content = re.sub(r'\((\w+)\s+(\d+)_(\d+)\)', r'(\1 \2.\3)', html_content)
+          
+        # Reverse "3_1 of this article" back to "3.1 of this article"  
+        html_content = re.sub(r'\b(\d+)_(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1.\2 \3', html_content)
+          
+        return html_content
+      
     def create_pdf_from_html(self, html_content: str) -> bytes:  
         """  
         Convert HTML content to PDF bytes.
