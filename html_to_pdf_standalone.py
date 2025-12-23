@@ -142,6 +142,28 @@ class HTMLToPDFConverter:
           
         return html_content
       
+    def protect_legal_references(self, html_content: str) -> str:  
+        """  
+        Temporarily replace periods in legal references with underscores to prevent  
+        them from being treated as decimal numbers.
+          
+        Args:  
+            html_content: HTML string to process
+              
+        Returns:  
+            HTML string with protected legal references  
+        """  
+        # PROTECTION PHASE: Fix patterns like "paragraph 1.1", "clause 3.2", "Article 176.1", etc.  
+        html_content = re.sub(r'\b(\w+)\s+(\d+)\.(\d+)\b', r'\1 \2_\3', html_content)
+          
+        # Fix patterns in parenthetical references like "(paragraph 4.1)"  
+        html_content = re.sub(r'\((\w+)\s+(\d+)\.(\d+)\)', r'(\1 \2_\3)', html_content)
+          
+        # Fix standalone decimal references like "3.1", "5.2" when they appear in legal contexts  
+        html_content = re.sub(r'\b(\d+)\.(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1_\2 \3', html_content)
+          
+        return html_content
+      
     def restore_legal_references(self, html_content: str) -> str:  
         """  
         Restore legal reference periods that were temporarily replaced with underscores.
@@ -199,7 +221,11 @@ class HTMLToPDFConverter:
         html_content = re.sub(r'margin-top:\s*\d+px;?', 'margin-top:0.4em;', html_content)  
         html_content = re.sub(r'line-height:\s*[\d.]+;?', 'line-height:1.6;', html_content)
       
-        # Clean up any decimal values in CSS or attributes  
+        # Clean up any decimal values in CSS or attributes (but NOT in legal references)  
+        # First protect legal references  
+        html_content = self.protect_legal_references(html_content)
+          
+        # Now safe to remove decimal values in CSS  
         html_content = re.sub(r'(\d+)\.(\d+)px', r'\1px', html_content)  
         html_content = re.sub(r'(\d+)\.(\d+)pt', r'\1pt', html_content)  
         html_content = re.sub(r'(\d+)\.(\d+)em', r'\1em', html_content)  
@@ -209,42 +235,15 @@ class HTMLToPDFConverter:
         html_content = re.sub(r'width="[\d.]+?"', 'width="100%"', html_content)  
         html_content = re.sub(r'height="[\d.]+?"', '', html_content)
           
-        # PROTECTION PHASE: Fix patterns like "paragraph 1.1", "clause 3.2", "Article 176.1", etc.  
-        html_content = re.sub(r'\b(\w+)\s+(\d+)\.(\d+)\b', r'\1 \2_\3', html_content)
-          
-        # Fix patterns in parenthetical references like "(paragraph 4.1)"  
-        html_content = re.sub(r'\((\w+)\s+(\d+)\.(\d+)\)', r'(\1 \2_\3)', html_content)
-          
-        # Fix standalone decimal references like "3.1", "5.2" when they appear in legal contexts  
-        html_content = re.sub(r'\b(\d+)\.(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1_\2 \3', html_content)
-          
         # Remove page number patterns like "201/1975", "202/1975" etc.  
         html_content = re.sub(r'\b\d+/\d+\b', '', html_content)
           
         # Remove extra whitespace between tags  
         html_content = re.sub(r'>\s+<', '><', html_content)
+          
+        # RESTORE legal references back to periods  
+        html_content = self.restore_legal_references(html_content)
       
-        return html_content
-      
-    def restore_legal_references(self, html_content: str) -> str:  
-        """  
-        Restore legal reference periods that were temporarily replaced with underscores.
-          
-        Args:  
-            html_content: HTML string with protected legal references
-              
-        Returns:  
-            HTML string with restored periods in legal references  
-        """  
-        # RESTORATION PHASE: Reverse "paragraph 1_1" back to "paragraph 1.1"  
-        html_content = re.sub(r'\b(\w+)\s+(\d+)_(\d+)\b', r'\1 \2.\3', html_content)
-          
-        # Reverse "(paragraph 4_1)" back to "(paragraph 4.1)"  
-        html_content = re.sub(r'\((\w+)\s+(\d+)_(\d+)\)', r'(\1 \2.\3)', html_content)
-          
-        # Reverse "3_1 of this article" back to "3.1 of this article"  
-        html_content = re.sub(r'\b(\d+)_(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1.\2 \3', html_content)
-          
         return html_content
       
     def create_pdf_from_html(self, html_content: str) -> bytes:  
@@ -261,7 +260,7 @@ class HTMLToPDFConverter:
             Exception: If PDF generation fails  
         """  
         pdf_output = BytesIO()  
-        # First sanitize (remove bad styles and protect legal references)  
+        # First sanitize (remove bad styles, protect and restore legal references)  
         html_content = self.sanitize_css_values(html_content)  
         # Then wrap with tight CSS styling  
         html_content = self.combine_html_pages([html_content])
@@ -282,10 +281,6 @@ class HTMLToPDFConverter:
                 logger.debug("PDF generation successful")
   
             pdf_bytes = pdf_output.getvalue()
-              
-            # Note: We don't restore legal references in the PDF output  
-            # because the PDF has already been generated from the processed HTML  
-            # If you need to save the HTML with restored references, do it before PDF generation
               
             return pdf_bytes  
         except Exception as e:  
@@ -312,15 +307,13 @@ class HTMLToPDFConverter:
           
         print(f"✓ PDF created successfully: {output_pdf_path} ({len(pdf_bytes)} bytes)")
           
-        # Optionally save the processed HTML with restored legal references  
+        # Optionally save the processed HTML  
         if save_processed_html:  
-            # Process the HTML again but restore legal references  
-            processed_html = self.fix_list_styles(html_content)  
-            processed_html = self.sanitize_css_values(processed_html)  
-            restored_html = self.restore_legal_references(processed_html)  
+            processed_html = self.sanitize_css_values(html_content)  
+            processed_html = self.combine_html_pages([processed_html])  
             processed_html_path = output_pdf_path.replace('.pdf', '_processed.html')  
             with open(processed_html_path, 'w', encoding='utf-8') as f:  
-                f.write(restored_html)  
+                f.write(processed_html)  
             print(f"✓ Processed HTML saved: {processed_html_path}")
   
     def convert_html_pages_to_pdf(self, html_pages: List[str], output_pdf_path: str) -> None:  
@@ -380,7 +373,7 @@ def main():
     )  
     parser.add_argument(  
         "--save-html", action="store_true",  
-        help="Save processed HTML with restored legal references"  
+        help="Save processed HTML for debugging"  
     )
       
     args = parser.parse_args()
