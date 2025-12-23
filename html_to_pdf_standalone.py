@@ -124,13 +124,13 @@ class HTMLToPDFConverter:
         html_content = re.sub(r'height="[\d.]+?"', '', html_content)
         
         # Fix patterns like "paragraph 1.1", "clause 3.2", "Article 176.1", etc.
-        html_content = re.sub(r'\b(\w+)\s+(\d+)\.(\d+)\b', r'\1 \2_\3', html_content)
+        #html_content = re.sub(r'\b(\w+)\s+(\d+)\.(\d+)\b', r'\1 \2_\3', html_content)
         
         # Fix patterns in parenthetical references like "(paragraph 4.1)"
-        html_content = re.sub(r'\((\w+)\s+(\d+)\.(\d+)\)', r'(\1 \2_\3)', html_content)
+        #html_content = re.sub(r'\((\w+)\s+(\d+)\.(\d+)\)', r'(\1 \2_\3)', html_content)
         
         # Fix standalone decimal references like "3.1", "5.2" when they appear in legal contexts
-        html_content = re.sub(r'\b(\d+)\.(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1_\2 \3', html_content)
+        #html_content = re.sub(r'\b(\d+)\.(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1_\2 \3', html_content)
         
         # Remove page number patterns like "201/1975", "202/1975" etc.
         html_content = re.sub(r'\b\d+/\d+\b', '', html_content)
