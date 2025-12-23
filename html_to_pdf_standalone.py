@@ -43,7 +43,17 @@ class HTMLToPDFConverter:
                 @page {{ size: letter; margin: 1cm; }}  
                 body {{ font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 0; padding: 0; }}  
                 .page {{ page-break-after: always; margin: 0; padding: 0; }}  
-                .page:last-child {{ page-break-after: auto; }}  
+                .page:last-child {{ page-break-after: auto; }}
+                  
+                /* List styling */  
+                ol, ul {{ margin: 0.5em 0; padding-left: 2em; }}  
+                ol[type="a"] {{ list-style-type: lower-alpha; }}  
+                ol[type="A"] {{ list-style-type: upper-alpha; }}  
+                ol[type="i"] {{ list-style-type: lower-roman; }}  
+                ol[type="I"] {{ list-style-type: upper-roman; }}  
+                ol[type="1"], ol {{ list-style-type: decimal; }}  
+                li {{ margin: 0.3em 0; line-height: 1.6; }}
+                  
                 table {{  
                     border-collapse: collapse;  
                     width: 100%;  
@@ -79,6 +89,79 @@ class HTMLToPDFConverter:
         </html>  
         """  
         return full_html
+      
+    def fix_list_styles(self, html_content: str) -> str:  
+        """  
+        Convert ol type attributes to inline CSS styles for better PDF rendering.
+          
+        Args:  
+            html_content: HTML string to process
+              
+        Returns:  
+            HTML string with list styles converted  
+        """  
+        # Map type attributes to CSS list-style-type values  
+        type_mapping = {  
+            'a': 'lower-alpha',  
+            'A': 'upper-alpha',  
+            'i': 'lower-roman',  
+            'I': 'upper-roman',  
+            '1': 'decimal'  
+        }
+          
+        # Replace ol type attributes with inline styles  
+        def replace_ol_type(match):  
+            type_value = match.group(1)  
+            other_attrs = match.group(2) if match.group(2) else ''
+              
+            if type_value in type_mapping:  
+                css_value = type_mapping[type_value]
+                  
+                # Check if style attribute already exists in other_attrs  
+                if 'style=' in other_attrs:  
+                    # Add to existing style  
+                    other_attrs = re.sub(  
+                        r'style="([^"]*)"',  
+                        rf'style="\1; list-style-type: {css_value};"',  
+                        other_attrs  
+                    )  
+                else:  
+                    # Add new style attribute  
+                    other_attrs += f' style="list-style-type: {css_value};"'
+                  
+                return f'<ol{other_attrs}>'
+              
+            return match.group(0)
+          
+        # Find all <ol type="..."> patterns  
+        html_content = re.sub(  
+            r'<ol[^>]*type=["\']([^"\']+)["\']([^>]*?)>',  
+            replace_ol_type,  
+            html_content  
+        )
+          
+        return html_content
+      
+    def restore_legal_references(self, html_content: str) -> str:  
+        """  
+        Restore legal reference periods that were temporarily replaced with underscores.
+          
+        Args:  
+            html_content: HTML string with protected legal references
+              
+        Returns:  
+            HTML string with restored periods in legal references  
+        """  
+        # RESTORATION PHASE: Reverse "paragraph 1_1" back to "paragraph 1.1"  
+        html_content = re.sub(r'\b(\w+)\s+(\d+)_(\d+)\b', r'\1 \2.\3', html_content)
+          
+        # Reverse "(paragraph 4_1)" back to "(paragraph 4.1)"  
+        html_content = re.sub(r'\((\w+)\s+(\d+)_(\d+)\)', r'(\1 \2.\3)', html_content)
+          
+        # Reverse "3_1 of this article" back to "3.1 of this article"  
+        html_content = re.sub(r'\b(\d+)_(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1.\2 \3', html_content)
+          
+        return html_content
           
     def sanitize_css_values(self, html_content: str) -> str:  
         """  
@@ -90,6 +173,9 @@ class HTMLToPDFConverter:
         Returns:  
             Sanitized HTML string  
         """  
+        # Fix list styles first (before any other processing)  
+        html_content = self.fix_list_styles(html_content)
+          
         # Remove the entire <style> section from HTML as it has excessive spacing  
         html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
           
@@ -138,27 +224,6 @@ class HTMLToPDFConverter:
         # Remove extra whitespace between tags  
         html_content = re.sub(r'>\s+<', '><', html_content)
       
-        return html_content
-      
-    def restore_legal_references(self, html_content: str) -> str:  
-        """  
-        Restore legal reference periods that were temporarily replaced with underscores.
-          
-        Args:  
-            html_content: HTML string with protected legal references
-              
-        Returns:  
-            HTML string with restored periods in legal references  
-        """  
-        # RESTORATION PHASE: Reverse "paragraph 1_1" back to "paragraph 1.1"  
-        html_content = re.sub(r'\b(\w+)\s+(\d+)_(\d+)\b', r'\1 \2.\3', html_content)
-          
-        # Reverse "(paragraph 4_1)" back to "(paragraph 4.1)"  
-        html_content = re.sub(r'\((\w+)\s+(\d+)_(\d+)\)', r'(\1 \2.\3)', html_content)
-          
-        # Reverse "3_1 of this article" back to "3.1 of this article"  
-        html_content = re.sub(r'\b(\d+)_(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1.\2 \3', html_content)
-          
         return html_content
       
     def create_pdf_from_html(self, html_content: str) -> bytes:  
@@ -228,7 +293,9 @@ class HTMLToPDFConverter:
           
         # Optionally save the processed HTML with restored legal references  
         if save_processed_html:  
-            processed_html = self.sanitize_css_values(html_content)  
+            # Process the HTML again but restore legal references  
+            processed_html = self.fix_list_styles(html_content)  
+            processed_html = self.sanitize_css_values(processed_html)  
             restored_html = self.restore_legal_references(processed_html)  
             processed_html_path = output_pdf_path.replace('.pdf', '_processed.html')  
             with open(processed_html_path, 'w', encoding='utf-8') as f:  
