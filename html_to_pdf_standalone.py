@@ -40,8 +40,22 @@ class HTMLToPDFConverter:
         <head>  
             <meta charset="UTF-8">  
             <style>  
+                @font-face {{
+                    font-family: DejaVu;
+                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+                }}
+                @font-face {{
+                    font-family: DejaVu;
+                    font-weight: bold;
+                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf');
+                }}
+                @font-face {{
+                    font-family: DejaVu;
+                    font-style: italic;
+                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf');
+                }}
                 @page {{ size: letter; margin: 1cm; }}  
-                body {{ font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 0; padding: 0; }}  
+                body {{ font-family: DejaVu, "Arial Unicode MS", Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 0; padding: 0; }}  
                 .page {{ page-break-after: always; margin: 0; padding: 0; }}  
                 .page:last-child {{ page-break-after: auto; }}
                   
@@ -141,6 +155,56 @@ class HTMLToPDFConverter:
         )
           
         return html_content
+    
+    def remove_duplicate_list_markers(self, html_content: str) -> str:
+        """
+        Remove duplicate list markers from <li> content, but only when the list
+        has visible markers (not list-style-type: none).
+        Example: <li>1. text</li> becomes <li>text</li> when list has markers
+        
+        Args:
+            html_content: HTML string to process
+            
+        Returns:
+            HTML string with cleaned list items
+        """
+        # Find all list blocks (ul/ol) and process them individually
+        def process_list(match):
+            list_tag = match.group(0)
+            
+            # Check if this list has list-style-type: none
+            if 'list-style-type:' in list_tag and 'none' in list_tag:
+                # Don't remove markers from lists with no style
+                return list_tag
+            elif 'list-style-type' in list_tag and 'none' in list_tag:
+                # Also check without colon (with space)
+                return list_tag
+            
+            # This list has visible markers, so remove duplicate text markers
+            # Remove numbered markers like "1. ", "2. ", "123. " from start of <li>
+            list_tag = re.sub(r'<li>\s*\d+\.\s+', r'<li>', list_tag)
+            
+            # Remove alphabetical markers like "a) ", "b) ", "z) " from start of <li>
+            list_tag = re.sub(r'<li>\s*[a-z]\)\s+', r'<li>', list_tag, flags=re.IGNORECASE)
+            
+            # Remove roman numeral markers like "(i) ", "(ii) ", "(iii) " from start of <li>
+            list_tag = re.sub(r'<li>\s*\([ivxlcdm]+\)\s+', r'<li>', list_tag, flags=re.IGNORECASE)
+            
+            # Remove alphabetical markers with periods like "a. ", "b. " from start of <li>
+            list_tag = re.sub(r'<li>\s*[a-z]\.\s+', r'<li>', list_tag, flags=re.IGNORECASE)
+            
+            # Remove uppercase alphabetical markers like "A) ", "B) " from start of <li>
+            list_tag = re.sub(r'<li>\s*[A-Z]\)\s+', r'<li>', list_tag)
+            
+            # Remove uppercase roman numerals like "(I) ", "(II) " from start of <li>
+            list_tag = re.sub(r'<li>\s*\([IVXLCDM]+\)\s+', r'<li>', list_tag)
+            
+            return list_tag
+        
+        # Process all <ul> and <ol> blocks
+        html_content = re.sub(r'<(?:ul|ol)[^>]*>.*?</(?:ul|ol)>', process_list, html_content, flags=re.DOTALL | re.IGNORECASE)
+        
+        return html_content
       
     def protect_legal_references(self, html_content: str) -> str:  
         """  
@@ -197,6 +261,9 @@ class HTMLToPDFConverter:
         """  
         # Fix list styles first (before any other processing)  
         html_content = self.fix_list_styles(html_content)
+        
+        # Remove duplicate list markers from <li> content
+        html_content = self.remove_duplicate_list_markers(html_content)
           
         # Remove the entire <style> section from HTML as it has excessive spacing  
         html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
