@@ -1,7 +1,28 @@
 #!/usr/bin/env python3  
 """  
 Standalone HTML to PDF Converter  
-Converts HTML content to PDF without external framework dependencies.  
+Converts HTML content to PDF while preserving source formatting.
+
+KEY FEATURES & FIXES:
+1. Font Handling:
+   - Uses Liberation Sans (not DejaVu Sans) which has complete italic support
+   - Ensures <em>, <i> tags render as italic (not bold)
+   - Critical for legal documents with italic annotations (e.g., {curly brace content})
+
+2. List Marker Preservation:
+   - Detects lists with list-style-type: none
+   - Preserves text markers (a), b), c)) in such lists
+   - Removes duplicate markers only when list has automatic markers
+
+3. Character Preservation:
+   - All bracket types ({}, [], ()) are preserved exactly as in HTML
+   - No character substitution or encoding changes
+   - UTF-8 encoding maintained throughout
+
+4. Formatting Preservation:
+   - Bold, italic, bold-italic all work correctly
+   - Table structures maintained
+   - Legal reference numbers (e.g., 14.1.13) preserved
 """
   
 import logging  
@@ -40,22 +61,36 @@ class HTMLToPDFConverter:
         <head>  
             <meta charset="UTF-8">  
             <style>  
+                /* Using Liberation Sans font family because it has proper support for:
+                   - Regular, Bold, Italic, and Bold-Italic variants
+                   - This ensures HTML <em>, <i>, <strong>, <b> tags render correctly
+                   - Critical for preserving source formatting like italic curly braces */
                 @font-face {{
-                    font-family: DejaVu;
-                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf');
+                    font-family: MainFont;
+                    src: url('/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf');
+                    font-weight: normal;
+                    font-style: normal;
                 }}
                 @font-face {{
-                    font-family: DejaVu;
+                    font-family: MainFont;
+                    src: url('/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf');
                     font-weight: bold;
-                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf');
+                    font-style: normal;
                 }}
                 @font-face {{
-                    font-family: DejaVu;
+                    font-family: MainFont;
+                    src: url('/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf');
+                    font-weight: normal;
                     font-style: italic;
-                    src: url('/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf');
+                }}
+                @font-face {{
+                    font-family: MainFont;
+                    src: url('/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf');
+                    font-weight: bold;
+                    font-style: italic;
                 }}
                 @page {{ size: letter; margin: 1cm; }}  
-                body {{ font-family: DejaVu, "Arial Unicode MS", Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 0; padding: 0; }}  
+                body {{ font-family: MainFont, "Liberation Sans", Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 0; padding: 0; }}  
                 .page {{ page-break-after: always; margin: 0; padding: 0; }}  
                 .page:last-child {{ page-break-after: auto; }}
                   
@@ -158,8 +193,13 @@ class HTMLToPDFConverter:
     
     def remove_duplicate_list_markers(self, html_content: str) -> str:
         """
-        Remove duplicate list markers from <li> content, but only when the list
+        Remove duplicate list markers from <li> content, but ONLY when the list
         has visible markers (not list-style-type: none).
+        
+        This is critical for preserving source formatting:
+        - When list has list-style-type: none → text markers like "a)", "b)" must be kept
+        - When list has default markers → text markers should be removed to avoid duplication
+        
         Example: <li>1. text</li> becomes <li>text</li> when list has markers
         
         Args:
@@ -172,12 +212,10 @@ class HTMLToPDFConverter:
         def process_list(match):
             list_tag = match.group(0)
             
-            # Check if this list has list-style-type: none
-            if 'list-style-type:' in list_tag and 'none' in list_tag:
-                # Don't remove markers from lists with no style
-                return list_tag
-            elif 'list-style-type' in list_tag and 'none' in list_tag:
-                # Also check without colon (with space)
+            # Check if this list has list-style-type: none (with or without spaces/colons)
+            # IMPORTANT: Lists with "none" style need text markers preserved
+            if 'list-style-type' in list_tag and 'none' in list_tag:
+                # Don't remove markers - they're the ONLY markers visible
                 return list_tag
             
             # This list has visible markers, so remove duplicate text markers
