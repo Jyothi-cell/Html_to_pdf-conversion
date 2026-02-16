@@ -108,19 +108,16 @@ class HTMLToPDFConverter:
                     width: 100% !important;  
                     margin: 0.5em 0;  
                     font-size: 9pt;  
-                    table-layout: auto !important;
-                    max-width: 100% !important;
+                    table-layout: fixed !important;
                 }}  
                 th, td {{  
                     border: 1px solid #ddd;  
-                    padding: 4pt 8pt !important;  
+                    padding: 0pt !important;  
                     text-align: left;  
                     vertical-align: top;  
                     word-wrap: break-word !important;
                     overflow-wrap: break-word !important;
-                    line-height: 1.4;
-                    min-width: 60pt !important;
-                    max-width: 300pt;
+                    line-height: 1.5;
                 }}  
                 th {{ background-color: #f2f2f2; font-weight: bold; }}  
                 h1, h2, h3, h4, h5, h6 {{ margin: 0.6em 0 0.3em 0; line-height: 1.4; }}  
@@ -296,19 +293,29 @@ class HTMLToPDFConverter:
         Fix table structure to ensure compatibility with PDF generation.
         Addresses the negative availWidth error by ensuring adequate cell widths.
         
+        AGGRESSIVE approach: Remove problematic attributes and force safe values.
+        
         Args:
             html_content: HTML string with tables
             
         Returns:
             HTML string with fixed table structure
         """
+        # Remove ALL colspan and rowspan attributes - they cause width calculation issues
+        html_content = re.sub(r'\s+colspan=\"[^\"]*\"', '', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'\s+rowspan=\"[^\"]*\"', '', html_content, flags=re.IGNORECASE)
+        
+        # Remove ALL width attributes from tables, td, th - let CSS handle it
+        html_content = re.sub(r'<table[^>]+width=\"[^\"]*\"[^>]*>', lambda m: m.group(0).replace(re.search(r'width=\"[^\"]*\"', m.group(0)).group(0), ''), html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'<(td|th)[^>]+width=\"[^\"]*\"', lambda m: m.group(0).replace(re.search(r'width=\"[^\"]*\"', m.group(0)).group(0), ''), html_content, flags=re.IGNORECASE)
+        
         # Fix table tags - ensure proper width and layout
         def fix_table_tag(match):
             tag = match.group(0)
             # Remove any existing style attribute
-            tag = re.sub(r'\s+style="[^"]*"', '', tag)
-            # Add our required styles
-            tag = tag.replace('<table', '<table style="width: 100%; max-width: 100%; table-layout: auto; border-collapse: collapse;"')
+            tag = re.sub(r'\s+style=\"[^\"]*\"', '', tag)
+            # Add our required styles - use FIXED layout with explicit width
+            tag = tag.replace('<table', '<table style=\"width: 100%; table-layout: fixed; border-collapse: collapse;\"')
             return tag
         
         html_content = re.sub(
@@ -318,14 +325,17 @@ class HTMLToPDFConverter:
             flags=re.IGNORECASE
         )
         
-        # Fix td/th tags - ensure minimum width and proper padding
+        # Fix td/th tags - NO padding to maximize available width
         def fix_cell_tag(match):
             tag_name = match.group(1)  # td or th
             full_tag = match.group(0)
-            # Remove any existing style attribute
-            full_tag = re.sub(r'\s+style="[^"]*"', '', full_tag)
-            # Add our required styles with much larger minimum width
-            full_tag = full_tag.replace(f'<{tag_name}', f'<{tag_name} style="min-width: 60pt; padding: 4pt 8pt; word-wrap: break-word; overflow-wrap: break-word;"')
+            # Remove any existing style, width, padding attributes
+            full_tag = re.sub(r'\s+style=\"[^\"]*\"', '', full_tag)
+            full_tag = re.sub(r'\s+width=\"[^\"]*\"', '', full_tag)
+            full_tag = re.sub(r'\s+padding=\"[^\"]*\"', '', full_tag)
+            # Zero padding required - this table has extremely narrow columns
+            # Use line-height for visual spacing instead
+            full_tag = full_tag.replace(f'<{tag_name}', f'<{tag_name} style="padding: 0; word-wrap: break-word; overflow-wrap: break-word; line-height: 1.5;"')
             return full_tag
         
         html_content = re.sub(
