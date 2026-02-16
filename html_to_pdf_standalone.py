@@ -107,18 +107,22 @@ class HTMLToPDFConverter:
                     border-collapse: collapse;  
                     width: 100%;  
                     margin: 0.5em 0;  
-                    font-size: 11pt;  
-                    table-layout: fixed;  
+                    font-size: 9pt;  
+                    table-layout: auto;
+                    max-width: 100%;
                 }}  
                 th, td {{  
                     border: 1px solid #ddd;  
-                    padding: 6px;  
+                    padding: 3pt 6pt;  
                     text-align: left;  
                     vertical-align: top;  
-                    word-wrap: break-word;  
-                    line-height: 1.6;  
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    line-height: 1.4;
+                    min-width: 40pt;
+                    max-width: 300pt;
                 }}  
-                th {{ background-color: #f2f2f2; font-weight: bold; }}  
+                th {{ background-color: #f2f2f2; font-weight: bold; padding: 4pt 6pt; }}  
                 h1, h2, h3, h4, h5, h6 {{ margin: 0.6em 0 0.3em 0; line-height: 1.4; }}  
                 h1 {{ font-size: 18pt; }}  
                 h2 {{ font-size: 15pt; }}  
@@ -286,6 +290,36 @@ class HTMLToPDFConverter:
         html_content = re.sub(r'\b(\d+)_(\d+)\s+(of\s+this\s+article|of\s+Article|of\s+this\s+Code)\b', r'\1.\2 \3', html_content)
           
         return html_content
+    
+    def fix_table_for_pdf(self, html_content: str) -> str:
+        """
+        Fix table structure to ensure compatibility with PDF generation.
+        Addresses the negative availWidth error by ensuring adequate cell widths.
+        
+        Args:
+            html_content: HTML string with tables
+            
+        Returns:
+            HTML string with fixed table structure
+        """
+        # Add inline styles to tables to prevent width issues
+        html_content = re.sub(
+            r'<table(\s+[^>]*?)?>',
+            r'<table\1 style="width: 100%; max-width: 100%; table-layout: auto;">',
+            html_content,
+            flags=re.IGNORECASE
+        )
+        
+        # Add minimum width and proper padding to td/th elements
+        # This prevents the negative availWidth error
+        html_content = re.sub(
+            r'<(td|th)(\s+[^>]*?)?>',
+            lambda m: f'<{m.group(1)}{m.group(2) or ""} style="min-width: 40pt; padding: 3pt 6pt; word-wrap: break-word; overflow-wrap: break-word;">',
+            html_content,
+            flags=re.IGNORECASE
+        )
+        
+        return html_content
           
     def sanitize_css_values(self, html_content: str) -> str:  
         """  
@@ -297,6 +331,9 @@ class HTMLToPDFConverter:
         Returns:  
             Sanitized HTML string  
         """  
+        # Fix tables FIRST to prevent width issues
+        html_content = self.fix_table_for_pdf(html_content)
+        
         # Fix list styles first (before any other processing)  
         html_content = self.fix_list_styles(html_content)
         
