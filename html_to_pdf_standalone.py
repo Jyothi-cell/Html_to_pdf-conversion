@@ -104,25 +104,25 @@ class HTMLToPDFConverter:
                 li {{ margin: 0.3em 0; line-height: 1.6; }}
                   
                 table {{  
-                    border-collapse: collapse;  
-                    width: 100%;  
+                    border-collapse: collapse !important;  
+                    width: 100% !important;  
                     margin: 0.5em 0;  
                     font-size: 9pt;  
-                    table-layout: auto;
-                    max-width: 100%;
+                    table-layout: auto !important;
+                    max-width: 100% !important;
                 }}  
                 th, td {{  
                     border: 1px solid #ddd;  
-                    padding: 3pt 6pt;  
+                    padding: 4pt 8pt !important;  
                     text-align: left;  
                     vertical-align: top;  
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
+                    word-wrap: break-word !important;
+                    overflow-wrap: break-word !important;
                     line-height: 1.4;
-                    min-width: 40pt;
+                    min-width: 60pt !important;
                     max-width: 300pt;
                 }}  
-                th {{ background-color: #f2f2f2; font-weight: bold; padding: 4pt 6pt; }}  
+                th {{ background-color: #f2f2f2; font-weight: bold; }}  
                 h1, h2, h3, h4, h5, h6 {{ margin: 0.6em 0 0.3em 0; line-height: 1.4; }}  
                 h1 {{ font-size: 18pt; }}  
                 h2 {{ font-size: 15pt; }}  
@@ -302,19 +302,35 @@ class HTMLToPDFConverter:
         Returns:
             HTML string with fixed table structure
         """
-        # Add inline styles to tables to prevent width issues
+        # Fix table tags - ensure proper width and layout
+        def fix_table_tag(match):
+            tag = match.group(0)
+            # Remove any existing style attribute
+            tag = re.sub(r'\s+style="[^"]*"', '', tag)
+            # Add our required styles
+            tag = tag.replace('<table', '<table style="width: 100%; max-width: 100%; table-layout: auto; border-collapse: collapse;"')
+            return tag
+        
         html_content = re.sub(
-            r'<table(\s+[^>]*?)?>',
-            r'<table\1 style="width: 100%; max-width: 100%; table-layout: auto;">',
+            r'<table[^>]*?>',
+            fix_table_tag,
             html_content,
             flags=re.IGNORECASE
         )
         
-        # Add minimum width and proper padding to td/th elements
-        # This prevents the negative availWidth error
+        # Fix td/th tags - ensure minimum width and proper padding
+        def fix_cell_tag(match):
+            tag_name = match.group(1)  # td or th
+            full_tag = match.group(0)
+            # Remove any existing style attribute
+            full_tag = re.sub(r'\s+style="[^"]*"', '', full_tag)
+            # Add our required styles with much larger minimum width
+            full_tag = full_tag.replace(f'<{tag_name}', f'<{tag_name} style="min-width: 60pt; padding: 4pt 8pt; word-wrap: break-word; overflow-wrap: break-word;"')
+            return full_tag
+        
         html_content = re.sub(
-            r'<(td|th)(\s+[^>]*?)?>',
-            lambda m: f'<{m.group(1)}{m.group(2) or ""} style="min-width: 40pt; padding: 3pt 6pt; word-wrap: break-word; overflow-wrap: break-word;">',
+            r'<(td|th)([^>]*?)?>',
+            fix_cell_tag,
             html_content,
             flags=re.IGNORECASE
         )
