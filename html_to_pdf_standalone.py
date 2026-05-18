@@ -393,11 +393,11 @@ class HTMLToPDFConverter:
         # First protect legal references  
         html_content = self.protect_legal_references(html_content)
           
-        # Now safe to remove decimal values in CSS  
+        # Clean up decimal values in CSS unit values only (px, pt, em) — NOT percentages
+        # WARNING: do NOT strip decimals from % values — legal text contains percentages like (0.2%), (0.5%)
         html_content = re.sub(r'(\d+)\.(\d+)px', r'\1px', html_content)  
         html_content = re.sub(r'(\d+)\.(\d+)pt', r'\1pt', html_content)  
-        html_content = re.sub(r'(\d+)\.(\d+)em', r'\1em', html_content)  
-        html_content = re.sub(r'(\d+)\.(\d+)%', r'\1%', html_content)
+        html_content = re.sub(r'(\d+)\.(\d+)em', r'\1em', html_content)
           
         # Remove any problematic attributes that might contain decimal values  
         html_content = re.sub(r'width="[\d.]+?"', 'width="100%"', html_content)  
